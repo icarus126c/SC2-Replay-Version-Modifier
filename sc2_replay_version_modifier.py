@@ -190,6 +190,33 @@ def default_target_from_args(args: argparse.Namespace) -> ReplayVersionInfo:
     )
 
 
+def collect_replays(inputs: list[Path], target: ReplayVersionInfo, target_replay: Path | None) -> list[Path]:
+    replay_paths: list[Path] = []
+    for item in inputs:
+        if item.is_dir():
+            replay_paths.extend(iter_input_replays(item, target, target_replay))
+        elif item.is_file():
+            if not target_replay or item.resolve() != target_replay.resolve():
+                replay_paths.append(item)
+    return replay_paths
+
+
+def batch_patch_replays(
+    inputs: list[Path],
+    target: ReplayVersionInfo,
+    target_replay: Path | None = None,
+    overwrite: bool = False,
+) -> list[tuple[Path, Path | None, str | None]]:
+    results: list[tuple[Path, Path | None, str | None]] = []
+    for replay_path in collect_replays(inputs, target, target_replay):
+        try:
+            out_path = patch_replay(replay_path, target=target, overwrite=overwrite)
+            results.append((replay_path, out_path, None))
+        except Exception as exc:
+            results.append((replay_path, None, str(exc)))
+    return results
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(
         description=(
@@ -225,28 +252,22 @@ def main() -> None:
         target = default_target_from_args(args)
 
     inputs = args.paths or [Path(".")]
-    replay_paths: list[Path] = []
-    for item in inputs:
-        if item.is_dir():
-            replay_paths.extend(iter_input_replays(item, target, args.target_replay))
-        elif item.is_file():
-            if not args.target_replay or item.resolve() != args.target_replay.resolve():
-                replay_paths.append(item)
+    replay_paths = collect_replays(inputs, target, args.target_replay)
 
     if not replay_paths:
         print("No matching replays found.")
         return
 
-    for replay_path in replay_paths:
-        try:
-            out_path = patch_replay(
-                replay_path,
-                target=target,
-                overwrite=args.overwrite,
-            )
+    for replay_path, out_path, error in batch_patch_replays(
+        replay_paths,
+        target=target,
+        target_replay=args.target_replay,
+        overwrite=args.overwrite,
+    ):
+        if error is None:
             print(f"patched: {replay_path} -> {out_path}")
-        except Exception as exc:
-            print(f"skipped: {replay_path} ({exc})")
+        else:
+            print(f"skipped: {replay_path} ({error})")
 
 
 if __name__ == "__main__":

@@ -26,31 +26,57 @@ It uses the verified **build-only** method:
 
 ## Download / 下载
 
-Windows packaged build:
+Windows GUI build:
 
-[release/sc2_replay_version_modifier_windows.zip](release/sc2_replay_version_modifier_windows.zip)
+[release/sc2_replay_version_modifier_gui_windows.zip](release/sc2_replay_version_modifier_gui_windows.zip)
 
-Windows 打包版：
+Windows 图形界面版：
 
-[release/sc2_replay_version_modifier_windows.zip](release/sc2_replay_version_modifier_windows.zip)
+[release/sc2_replay_version_modifier_gui_windows.zip](release/sc2_replay_version_modifier_gui_windows.zip)
 
 ## Recommended Usage / 推荐用法
 
-Unzip the Windows package, then run:
+Unzip the Windows package, then double-click:
+
+```text
+sc2_replay_version_modifier_gui.exe
+```
+
+In the app:
+
+1. Choose one replay from the new SC2 version.
+2. Choose the folder that contains old replays.
+3. Click the batch process button.
+
+解压 Windows 压缩包后，双击：
+
+```text
+sc2_replay_version_modifier_gui.exe
+```
+
+在界面中：
+
+1. 选择一份新版本录像。
+2. 选择旧录像所在文件夹。
+3. 点击开始批量处理。
+
+The tool recursively scans `.SC2Replay` files in the old replay folder and creates patched copies next to the originals.
+
+工具会递归扫描旧录像文件夹里的 `.SC2Replay` 文件，并在原文件旁边生成修改后的副本。
+
+## Command Line Usage / 命令行用法
+
+The command-line script supports the same target-replay workflow:
 
 ```powershell
 .\sc2_replay_version_modifier.exe --target-replay "C:\Path\To\NewReplay.SC2Replay" "C:\Path\To\OldReplayFolder"
 ```
 
-解压 Windows 压缩包后运行：
+命令行脚本也支持同样的新录像目标版本流程：
 
 ```powershell
 .\sc2_replay_version_modifier.exe --target-replay "C:\新录像\新版录像.SC2Replay" "C:\老录像文件夹"
 ```
-
-The tool recursively scans `.SC2Replay` files in the old replay folder and creates patched copies next to the originals.
-
-工具会递归扫描旧录像文件夹里的 `.SC2Replay` 文件，并在原文件旁边生成修改后的副本。
 
 ## Legacy Fixed Mode / 固定版本模式
 
@@ -96,6 +122,7 @@ python sc2_replay_version_modifier.py --target-replay "C:\Path\To\NewReplay.SC2R
 
 ```powershell
 python -m pip install pyinstaller mpyq
+python -m PyInstaller --windowed --onedir --name sc2_replay_version_modifier_gui sc2_replay_version_modifier_gui.py
 python -m PyInstaller --onedir --name sc2_replay_version_modifier sc2_replay_version_modifier.py
 ```
 
