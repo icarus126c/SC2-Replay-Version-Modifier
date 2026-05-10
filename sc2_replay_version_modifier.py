@@ -3,6 +3,7 @@ from __future__ import annotations
 import argparse
 import bz2
 import json
+import re
 import shutil
 from dataclasses import dataclass
 from pathlib import Path
@@ -36,6 +37,11 @@ def encode_sc2_vint(value: int) -> bytes:
         value >>= 7
         out.append(byte | (0x80 if value else 0))
     return bytes(out)
+
+
+def numeric_build_from_base_build(base_build: str) -> str | None:
+    match = re.fullmatch(r"Base(\d+)", base_build)
+    return match.group(1) if match else None
 
 
 def read_replay_metadata(path: Path) -> tuple[MPQArchive, bytes, dict]:
@@ -77,6 +83,25 @@ def compress_to_existing_size(metadata: bytes, capacity: int) -> bytes:
     compressed = bz2.compress(metadata)
     if len(compressed) <= capacity:
         return compressed
+
+    # MPQ block table sizes are not rewritten by this tool, so keep the
+    # decompressed metadata byte length unchanged. Compact JSON often shrinks
+    # enough to make the changed version strings fit after bzip2 compression;
+    # trailing whitespace is valid JSON and preserves the original block size.
+    try:
+        compact_metadata = json.dumps(
+            json.loads(metadata),
+            ensure_ascii=False,
+            separators=(",", ":"),
+        ).encode("utf-8")
+    except (UnicodeDecodeError, json.JSONDecodeError):
+        compact_metadata = b""
+
+    if compact_metadata and len(compact_metadata) <= len(metadata):
+        candidate = compact_metadata + (b" " * (len(metadata) - len(compact_metadata)))
+        compressed = bz2.compress(candidate)
+        if len(compressed) <= capacity:
+            return compressed
 
     # Keep JSON byte length unchanged while nudging a few display-only values
     # into forms that compress better. JSON allows whitespace after numbers.
@@ -126,8 +151,16 @@ def patch_replay(
     compressed_metadata = compress_to_existing_size(patched_metadata, block_entry.archived_size - 1)
     new_payload = (b"\x10" + compressed_metadata).ljust(block_entry.archived_size, b"\x00")
 
-    old_build_vint = encode_sc2_vint(int(source.data_build))
-    new_build_vint = encode_sc2_vint(int(target.data_build))
+    source_builds = {source.data_build}
+    source_base_build = numeric_build_from_base_build(source.base_build)
+    if source_base_build:
+        source_builds.add(source_base_build)
+
+    target_build = numeric_build_from_base_build(target.base_build) or target.data_build
+    replacement_builds = {
+        encode_sc2_vint(int(source_build)): encode_sc2_vint(int(target_build))
+        for source_build in source_builds
+    }
 
     patched_file = bytearray(path.read_bytes())
     patched_file[payload_start:payload_end] = new_payload
@@ -139,9 +172,10 @@ def patch_replay(
     content_start = 16
     content_end = content_start + user_header["user_data_header_size"]
     user_content = bytes(patched_file[content_start:content_end])
-    if old_build_vint not in user_content:
+    if not any(old_build_vint in user_content for old_build_vint in replacement_builds):
         raise RuntimeError(f"could not find encoded build {source.data_build} in {path}")
-    user_content = user_content.replace(old_build_vint, new_build_vint)
+    for old_build_vint, new_build_vint in replacement_builds.items():
+        user_content = user_content.replace(old_build_vint, new_build_vint)
     patched_file[content_start:content_end] = user_content
 
     if overwrite:
